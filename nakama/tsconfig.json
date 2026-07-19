@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "es2017",
+    "module": "commonjs",
+    "lib": ["es2017"],
+    "strict": true,
+    "noImplicitAny": true,
+    "moduleResolution": "node",
+    "typeRoots": ["./node_modules/@heroiclabs"],
+    "types": ["nakama-runtime"],
+    "outDir": "build",
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["modules/**/*.ts"]
+}

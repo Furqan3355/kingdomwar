@@ -1,0 +1,16 @@
+{
+  "buildings": [
+    {
+      "buildingId": "gold_factory",
+      "displayName": "Gold Factory",
+      "maxLevel": 10,
+      "category": "production",
+      "unlockCastleLevel": 1,
+      "levels": [
+        { "level": 1, "upgradeTimeSeconds": 30,  "costGold": 0,   "costCrystal": 0,  "costMithril": 0, "productionRate": 5 },
+        { "level": 2, "upgradeTimeSeconds": 120, "costGold": 200, "costCrystal": 0,  "costMithril": 0, "productionRate": 12 },
+        { "level": 3, "upgradeTimeSeconds": 300, "costGold": 500, "costCrystal": 50, "costMithril": 0, "productionRate": 25 }
+      ]
+    }
+  ]
+}

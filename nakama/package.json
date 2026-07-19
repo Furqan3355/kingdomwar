@@ -1,0 +1,14 @@
+{
+  "name": "storm-mmorts-nakama-modules",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild modules/main.ts --bundle --outfile=build/index.js --format=cjs --platform=node --target=es2017",
+    "watch": "npm run build -- --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "@heroiclabs/nakama-runtime": "github:heroiclabs/nakama-common",
+    "typescript": "^5.4.0"
+  }
+}
