@@ -1,0 +1,36 @@
+# Node / npm packages
+node_modules/
+package-lock.json.bak
+
+# Build/output folders
+dist/
+build/
+out/
+*.log
+
+# Environment/secret files (bohat zaroori — passwords/keys hoti hain)
+.env
+.env.local
+.env.*.local
+
+# OS ki fazool files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE ki files
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Unity-specific files (agar Unity project bhi isi repo mein hai)
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+*.csproj
+*.sln
+*.unityproxy
