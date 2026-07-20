@@ -35,20 +35,27 @@ function initializeNewPlayer(
 ): void {
   const shardId = getLowestPopulationOpenShard(nk);
 
+  // 0005 redesign: starter roster is Castle + 3 Storages + Builder Hut +
+  // Summon Hut, placed at fixed non-overlapping coordinates (generous gaps,
+  // well over the 1-tile buffer minimum). Castle/Builder Hut/Summon Hut
+  // start already built at level 1 (their level-1 config is free/instant,
+  // same pattern as Volume 1's original starting castle). Storages start
+  // placed but unbuilt (level 0) — the player upgrades them like any other
+  // building. Every other building (Barracks, defense structures, etc.) is
+  // NOT in the starting roster at all — per the new "shop" model, the
+  // player must unlock (castle level) AND place (place_building RPC) them
+  // manually; nothing is auto-placed on their behalf.
   const startingState: KingdomState = {
     userId,
     shardId,
     castleLevel: 1,
-    // Volume 2 §9: the Castle building instance and castleLevel must start
-    // in sync — 0002_city_system.sql seeds castle level 1 as free/instant, so
-    // the new player begins already "built" at level 1, not mid-construction.
     buildings: {
-      'castle:4_4': {
-        buildingId: 'castle',
-        slot: '4_4',
-        level: 1,
-        upgradeFinishTick: null,
-      },
+      'castle:2_12':        { buildingId: 'castle',        slot: '2_12', level: 1, upgradeFinishTick: null },
+      'builder_hut:2_7':     { buildingId: 'builder_hut',   slot: '2_7',  level: 1, upgradeFinishTick: null },
+      'summon_hut:7_7':      { buildingId: 'summon_hut',    slot: '7_7',  level: 1, upgradeFinishTick: null },
+      'gold_storage:2_2':    { buildingId: 'gold_storage',  slot: '2_2',  level: 0, upgradeFinishTick: null },
+      'crystal_storage:7_2': { buildingId: 'crystal_storage', slot: '7_2', level: 0, upgradeFinishTick: null },
+      'mithril_storage:12_2':{ buildingId: 'mithril_storage', slot: '12_2', level: 0, upgradeFinishTick: null },
     },
     resources: { gold: 500, crystal: 100, mithril: 0 },
     lastCalculatedTick: Math.floor(Date.now() / 1000),

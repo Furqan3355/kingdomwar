@@ -28,7 +28,7 @@ function getBuildingLevelConfig(nk, buildingId, level) {
 function getBuildingConfig(nk, buildingId) {
   const query = `
     SELECT building_id, display_name, max_level, category, unlock_castle_level,
-           resource_type, effect_type
+           resource_type, effect_type, footprint_width, footprint_height
     FROM building_config
     WHERE building_id = $1
   `;
@@ -44,7 +44,9 @@ function getBuildingConfig(nk, buildingId) {
     category: row.category,
     unlock_castle_level: row.unlock_castle_level,
     resource_type: row.resource_type,
-    effect_type: row.effect_type
+    effect_type: row.effect_type,
+    footprint_width: Number(row.footprint_width),
+    footprint_height: Number(row.footprint_height)
   };
 }
 function getBuildingPrerequisites(nk, buildingId) {
@@ -60,11 +62,24 @@ function getBuildingPrerequisites(nk, buildingId) {
     requires_level: row.requires_level
   }));
 }
-function getSlotBinding(nk, slotId) {
-  const query = `SELECT slot_id, building_id FROM building_slot WHERE slot_id = $1`;
-  const result = nk.sqlQuery(query, [slotId]);
+function getWorldConfigValue(nk, key) {
+  const result = nk.sqlQuery(`SELECT config_value FROM world_config WHERE config_key = $1`, [key]);
+  if (!result || result.length === 0) {
+    throw Error(`missing world_config value for '${key}' \u2014 check 0005 migration ran`);
+  }
+  return Number(result[0].config_value);
+}
+function getBuildingUnlockConfig(nk, buildingId) {
+  const result = nk.sqlQuery(
+    `SELECT building_id, unlock_castle_level, is_starter_building FROM building_unlock_config WHERE building_id = $1`,
+    [buildingId]
+  );
   if (!result || result.length === 0) return null;
-  return { slot_id: result[0].slot_id, building_id: result[0].building_id };
+  return {
+    building_id: result[0].building_id,
+    unlock_castle_level: result[0].unlock_castle_level,
+    is_starter_building: result[0].is_starter_building
+  };
 }
 function getStorageCapForResource(nk, buildings, resourceType) {
   let total = 0;
@@ -121,7 +136,7 @@ function resolveProductionInMemory(nk, state) {
     const b = state.buildings[key];
     if (b.upgradeFinishTick !== null) continue;
     const buildingCfg = getBuildingConfig(nk, b.buildingId);
-    if (!buildingCfg || buildingCfg.effect_type !== "production") continue;
+    if (!buildingCfg || !buildingCfg.resource_type) continue;
     const levelCfg = getBuildingLevelConfig(nk, b.buildingId, b.level);
     if (!levelCfg || levelCfg.production_rate === null) continue;
     if (buildingCfg.resource_type === "gold") goldRate += levelCfg.production_rate;
@@ -182,17 +197,16 @@ function rpcUpgradeBuilding(ctx, logger, nk, payload) {
   if (!req.buildingId || !req.slot) {
     return respond({ ok: false, error: "missing_building_id_or_slot" });
   }
-  const slotBinding = getSlotBinding(nk, req.slot);
-  if (!slotBinding || slotBinding.building_id !== req.buildingId) {
-    return respond({ ok: false, error: "invalid_slot_for_building" });
-  }
   const state = readAndResolveKingdomState(nk, userId);
   completeFinishedUpgrades(state);
   const key = buildingKey(req.buildingId, req.slot);
   const existing = state.buildings[key];
-  const currentLevel = existing ? existing.level : 0;
+  if (!existing) {
+    return respond({ ok: false, error: "not_placed_yet" });
+  }
+  const currentLevel = existing.level;
   const targetLevel = currentLevel + 1;
-  if (existing && existing.upgradeFinishTick !== null) {
+  if (existing.upgradeFinishTick !== null) {
     return respond({ ok: false, error: "already_upgrading" });
   }
   const buildingCfg = getBuildingConfig(nk, req.buildingId);
@@ -204,6 +218,11 @@ function rpcUpgradeBuilding(ctx, logger, nk, payload) {
   }
   if (state.castleLevel < buildingCfg.unlock_castle_level) {
     return respond({ ok: false, error: "castle_level_too_low" });
+  }
+  const inProgressUpgrades = countInProgressUpgrades(state);
+  const builderCapacity = getBuilderHutCapacity(nk, state);
+  if (inProgressUpgrades >= builderCapacity) {
+    return respond({ ok: false, error: "no_available_builder" });
   }
   if (currentLevel === 0) {
     const prereqs = getBuildingPrerequisites(nk, req.buildingId);
@@ -224,23 +243,16 @@ function rpcUpgradeBuilding(ctx, logger, nk, payload) {
   state.resources.crystal -= levelCfg.cost_crystal;
   state.resources.mithril -= levelCfg.cost_mithril;
   const nowSeconds = Math.floor(Date.now() / 1e3);
-  const newInstance = {
-    buildingId: req.buildingId,
-    slot: req.slot,
-    level: currentLevel,
-    // level only increments on completion, see completeFinishedUpgrades()
-    upgradeFinishTick: nowSeconds + levelCfg.upgrade_time_seconds
-  };
-  state.buildings[key] = newInstance;
+  existing.upgradeFinishTick = nowSeconds + levelCfg.upgrade_time_seconds;
   if (req.buildingId === "castle" && levelCfg.upgrade_time_seconds === 0) {
     state.castleLevel = targetLevel;
-    newInstance.level = targetLevel;
-    newInstance.upgradeFinishTick = null;
+    existing.level = targetLevel;
+    existing.upgradeFinishTick = null;
   }
   writeKingdomState(nk, userId, state);
   return respond({
     ok: true,
-    building: newInstance,
+    building: existing,
     resources: state.resources
   });
 }
@@ -257,6 +269,23 @@ function completeFinishedUpgrades(state) {
     }
   }
   return state;
+}
+function getBuilderHutCapacity(nk, state) {
+  let capacity = 0;
+  for (const key in state.buildings) {
+    const b = state.buildings[key];
+    if (b.buildingId !== "builder_hut" || b.level < 1) continue;
+    const levelCfg = getBuildingLevelConfig(nk, "builder_hut", b.level);
+    if (levelCfg && levelCfg.stat_value !== null) capacity += levelCfg.stat_value;
+  }
+  return capacity;
+}
+function countInProgressUpgrades(state) {
+  let count = 0;
+  for (const key in state.buildings) {
+    if (state.buildings[key].upgradeFinishTick !== null) count++;
+  }
+  return count;
 }
 function playerHasBuildingAtLevel(state, buildingId, minLevel) {
   for (const key in state.buildings) {
@@ -290,16 +319,13 @@ function initializeNewPlayer(nk, logger, userId) {
     userId,
     shardId,
     castleLevel: 1,
-    // Volume 2 §9: the Castle building instance and castleLevel must start
-    // in sync — 0002_city_system.sql seeds castle level 1 as free/instant, so
-    // the new player begins already "built" at level 1, not mid-construction.
     buildings: {
-      "castle:4_4": {
-        buildingId: "castle",
-        slot: "4_4",
-        level: 1,
-        upgradeFinishTick: null
-      }
+      "castle:2_12": { buildingId: "castle", slot: "2_12", level: 1, upgradeFinishTick: null },
+      "builder_hut:2_7": { buildingId: "builder_hut", slot: "2_7", level: 1, upgradeFinishTick: null },
+      "summon_hut:7_7": { buildingId: "summon_hut", slot: "7_7", level: 1, upgradeFinishTick: null },
+      "gold_storage:2_2": { buildingId: "gold_storage", slot: "2_2", level: 0, upgradeFinishTick: null },
+      "crystal_storage:7_2": { buildingId: "crystal_storage", slot: "7_2", level: 0, upgradeFinishTick: null },
+      "mithril_storage:12_2": { buildingId: "mithril_storage", slot: "12_2", level: 0, upgradeFinishTick: null }
     },
     resources: { gold: 500, crystal: 100, mithril: 0 },
     lastCalculatedTick: Math.floor(Date.now() / 1e3),
@@ -339,6 +365,75 @@ function rpcGetFullState(ctx, logger, nk, payload) {
   return JSON.stringify(response);
 }
 
+// modules/economy/placement.ts
+function rectsOverlapWithBuffer(a, b, buffer) {
+  const ax1 = a.x - buffer;
+  const ay1 = a.y - buffer;
+  const ax2 = a.x + a.width + buffer;
+  const ay2 = a.y + a.height + buffer;
+  const bx1 = b.x;
+  const by1 = b.y;
+  const bx2 = b.x + b.width;
+  const by2 = b.y + b.height;
+  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+}
+function rpcPlaceBuilding(ctx, logger, nk, payload) {
+  const userId = ctx.userId;
+  if (!userId) return respond2({ ok: false, error: "unauthenticated" });
+  let req;
+  try {
+    req = JSON.parse(payload);
+  } catch (e) {
+    return respond2({ ok: false, error: "invalid_payload" });
+  }
+  if (!req.buildingId || req.x === void 0 || req.y === void 0) {
+    return respond2({ ok: false, error: "missing_fields" });
+  }
+  const state = readAndResolveKingdomState(nk, userId);
+  completeFinishedUpgrades(state);
+  const buildingCfg = getBuildingConfig(nk, req.buildingId);
+  if (!buildingCfg) return respond2({ ok: false, error: "unknown_building" });
+  const unlockCfg = getBuildingUnlockConfig(nk, req.buildingId);
+  if (!unlockCfg) return respond2({ ok: false, error: "building_not_unlockable" });
+  if (!unlockCfg.is_starter_building && state.castleLevel < unlockCfg.unlock_castle_level) {
+    return respond2({ ok: false, error: "not_yet_unlocked" });
+  }
+  const gridWidth = getWorldConfigValue(nk, "city_grid_width");
+  const gridHeight = getWorldConfigValue(nk, "city_grid_height");
+  const newRect = { x: req.x, y: req.y, width: buildingCfg.footprint_width, height: buildingCfg.footprint_height };
+  if (newRect.x < 0 || newRect.y < 0 || newRect.x + newRect.width > gridWidth || newRect.y + newRect.height > gridHeight) {
+    return respond2({ ok: false, error: "out_of_bounds" });
+  }
+  const buffer = getWorldConfigValue(nk, "placement_buffer_tiles");
+  for (const key2 in state.buildings) {
+    const existing = state.buildings[key2];
+    const existingCfg = getBuildingConfig(nk, existing.buildingId);
+    if (!existingCfg) continue;
+    const parts = existing.slot.split("_").map(Number);
+    const existingRect = { x: parts[0], y: parts[1], width: existingCfg.footprint_width, height: existingCfg.footprint_height };
+    if (rectsOverlapWithBuffer(newRect, existingRect, buffer)) {
+      return respond2({ ok: false, error: "overlaps_or_too_close", conflictingSlot: existing.slot });
+    }
+  }
+  const slotKey = `${req.x}_${req.y}`;
+  const key = `${req.buildingId}:${slotKey}`;
+  if (state.buildings[key]) {
+    return respond2({ ok: false, error: "already_placed_here" });
+  }
+  state.buildings[key] = {
+    buildingId: req.buildingId,
+    slot: slotKey,
+    level: 0,
+    // placed but not yet built — upgrade_building takes it to level 1
+    upgradeFinishTick: null
+  };
+  writeKingdomState(nk, userId, state);
+  return respond2({ ok: true, building: state.buildings[key] });
+}
+function respond2(res) {
+  return JSON.stringify(res);
+}
+
 // modules/main.ts
 var InitModule = function(ctx, logger, nk, initializer) {
   initializer.registerAfterAuthenticateDevice(afterAuthenticate);
@@ -347,6 +442,7 @@ var InitModule = function(ctx, logger, nk, initializer) {
   initializer.registerAfterAuthenticateApple(afterAuthenticate);
   initializer.registerRpc("get_full_state", rpcGetFullState);
   initializer.registerRpc("upgrade_building", rpcUpgradeBuilding);
+  initializer.registerRpc("place_building", rpcPlaceBuilding);
   logger.info("Storm MMORTS Volume 1 modules loaded");
 };
 globalThis.InitModule = InitModule;

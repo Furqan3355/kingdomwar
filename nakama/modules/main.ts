@@ -2,6 +2,7 @@
 import { afterAuthenticate } from './auth/hooks';
 import { rpcUpgradeBuilding } from './economy/buildings';
 import { rpcGetFullState } from './economy/get_full_state';
+import { rpcPlaceBuilding } from './economy/placement';
 
 const InitModule: nkruntime.InitModule = function (
   ctx: nkruntime.Context,
@@ -19,6 +20,7 @@ const InitModule: nkruntime.InitModule = function (
 
   initializer.registerRpc('get_full_state', rpcGetFullState);
   initializer.registerRpc('upgrade_building', rpcUpgradeBuilding);
+  initializer.registerRpc('place_building',rpcPlaceBuilding)
 
   logger.info('Storm MMORTS Volume 1 modules loaded');
 };

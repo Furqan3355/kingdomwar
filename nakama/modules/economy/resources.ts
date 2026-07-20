@@ -41,7 +41,14 @@ export function resolveProductionInMemory(nk: nkruntime.Nakama, state: KingdomSt
     const b = state.buildings[key];
     if (b.upgradeFinishTick !== null) continue; // still under construction — no production yet
     const buildingCfg = getBuildingConfig(nk, b.buildingId);
-    if (!buildingCfg || buildingCfg.effect_type !== 'production') continue;
+    // Checks resource_type presence rather than effect_type === 'production'
+    // — some buildings are dual-purpose (e.g. Castle is effect_type:
+    // 'utility' for the unlock-gate role, but ALSO has resource_type: 'gold'
+    // since the city itself produces gold directly, per the 0004 redesign).
+    // A building only needs a resource_type + a production_rate at its
+    // current level to contribute — its primary effect_type category
+    // doesn't gate this.
+    if (!buildingCfg || !buildingCfg.resource_type) continue;
 
     const levelCfg = getBuildingLevelConfig(nk, b.buildingId, b.level);
     if (!levelCfg || levelCfg.production_rate === null) continue;

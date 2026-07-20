@@ -8,7 +8,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.21.0",
-    "@heroiclabs/nakama-runtime": "github:heroiclabs/nakama-common",
+    "nakama-runtime": "^3.21.0",
     "typescript": "^5.4.0"
   }
 }

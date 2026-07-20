@@ -1,5 +1,5 @@
 // modules/config/loader.ts
-import { BuildingConfigRow, BuildingLevelConfigRow, BuildingPrerequisite, SlotBinding } from '../types';
+import { BuildingConfigRow, BuildingLevelConfigRow, BuildingPrerequisite, SlotBinding, BuildingUnlockConfigRow } from '../types';
 
 // These reads hit the *authoritative* config tables described in Volume 1 §5/§9.
 // The client's ScriptableObject-derived copy is display-only; every RPC that
@@ -40,7 +40,7 @@ export function getBuildingConfig(
 ): BuildingConfigRow | null {
   const query = `
     SELECT building_id, display_name, max_level, category, unlock_castle_level,
-           resource_type, effect_type
+           resource_type, effect_type, footprint_width, footprint_height
     FROM building_config
     WHERE building_id = $1
   `;
@@ -57,6 +57,8 @@ export function getBuildingConfig(
     unlock_castle_level: row.unlock_castle_level,
     resource_type: row.resource_type,
     effect_type: row.effect_type,
+    footprint_width: Number(row.footprint_width),
+    footprint_height: Number(row.footprint_height),
   };
 }
 
@@ -88,6 +90,27 @@ export function getSlotBinding(nk: nkruntime.Nakama, slotId: string): SlotBindin
 
 // Sum of stat_value across every built instance of a given resource's storage
 // building (Volume 2 §4 — Gold/Crystal/Mithril Storage clamp production to this cap).
+export function getWorldConfigValue(nk: nkruntime.Nakama, key: string): number {
+  const result = nk.sqlQuery(`SELECT config_value FROM world_config WHERE config_key = $1`, [key]);
+  if (!result || result.length === 0) {
+    throw Error(`missing world_config value for '${key}' — check 0005 migration ran`);
+  }
+  return Number(result[0].config_value);
+}
+
+export function getBuildingUnlockConfig(nk: nkruntime.Nakama, buildingId: string): BuildingUnlockConfigRow | null {
+  const result = nk.sqlQuery(
+    `SELECT building_id, unlock_castle_level, is_starter_building FROM building_unlock_config WHERE building_id = $1`,
+    [buildingId]
+  );
+  if (!result || result.length === 0) return null;
+  return {
+    building_id: result[0].building_id,
+    unlock_castle_level: result[0].unlock_castle_level,
+    is_starter_building: result[0].is_starter_building,
+  };
+}
+
 export function getStorageCapForResource(
   nk: nkruntime.Nakama,
   buildings: Record<string, { buildingId: string; level: number }>,

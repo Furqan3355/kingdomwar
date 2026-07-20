@@ -4,13 +4,15 @@ import {
   UpgradeBuildingRequest,
   UpgradeBuildingResponse,
 } from '../types';
-import { getBuildingConfig, getBuildingLevelConfig, getBuildingPrerequisites, getSlotBinding } from '../config/loader';
+import { getBuildingConfig, getBuildingLevelConfig, getBuildingPrerequisites } from '../config/loader';
 import { readAndResolveKingdomState, writeKingdomState } from './resources';
 
-// Generic building-upgrade RPC. Handles ANY building defined in
-// building_config/building_level_config. Volume 2 layers slot-binding,
-// cross-building prerequisites, and the Castle-level sync branch on top of
-// the Volume 1 framework below.
+// Generic building-upgrade RPC. As of 0005 (freeform placement), a building
+// must already exist on the grid — via place_building (placement.ts) — before
+// it can be upgraded. This RPC no longer creates instances out of thin air;
+// it only ever advances an EXISTING instance from its current level to +1.
+
+const RESEARCH_MAX_CONCURRENT = 1; // fixed rule, not a per-Builder-Hut-scaled value — see §Builder Hut note below
 
 export function rpcUpgradeBuilding(
   ctx: nkruntime.Context,
@@ -33,23 +35,23 @@ export function rpcUpgradeBuilding(
     return respond({ ok: false, error: 'missing_building_id_or_slot' });
   }
 
-  // Volume 2 §12.3: reject placing a building at a slot it's not bound to
-  // (e.g. can't put gold_factory where castle belongs).
-  const slotBinding = getSlotBinding(nk, req.slot);
-  if (!slotBinding || slotBinding.building_id !== req.buildingId) {
-    return respond({ ok: false, error: 'invalid_slot_for_building' });
-  }
-
   // Rule §17: always resolve current authoritative state before validating.
   const state = readAndResolveKingdomState(nk, userId);
   completeFinishedUpgrades(state);
   const key = buildingKey(req.buildingId, req.slot);
   const existing = state.buildings[key];
-  const currentLevel = existing ? existing.level : 0;
+
+  // 0005: buildings must be placed (place_building) before they can be
+  // upgraded — this RPC never creates a new instance implicitly anymore.
+  if (!existing) {
+    return respond({ ok: false, error: 'not_placed_yet' });
+  }
+
+  const currentLevel = existing.level;
   const targetLevel = currentLevel + 1;
 
   // Reject if already upgrading (idempotency guard, rule §18).
-  if (existing && existing.upgradeFinishTick !== null) {
+  if (existing.upgradeFinishTick !== null) {
     return respond({ ok: false, error: 'already_upgrading' });
   }
 
@@ -64,10 +66,23 @@ export function rpcUpgradeBuilding(
     return respond({ ok: false, error: 'castle_level_too_low' });
   }
 
+  // Builder Hut concurrency check (new in 0005): the number of buildings
+  // simultaneously mid-upgrade cannot exceed the sum of stat_value across
+  // all built (level >= 1) Builder Huts. Research is a SEPARATE pool always
+  // capped at RESEARCH_MAX_CONCURRENT regardless of Builder Hut count — but
+  // research itself isn't implemented via this RPC yet (Academy is still a
+  // shell, per Volume 2 §10), so only the building-upgrade pool is enforced
+  // here. When research lands, it must check its OWN concurrent-count
+  // against RESEARCH_MAX_CONCURRENT, not against Builder Hut capacity.
+  const inProgressUpgrades = countInProgressUpgrades(state);
+  const builderCapacity = getBuilderHutCapacity(nk, state);
+  if (inProgressUpgrades >= builderCapacity) {
+    return respond({ ok: false, error: 'no_available_builder' });
+  }
+
   // Volume 2 §12.2: cross-building prerequisites (e.g. Academy needs
   // Barracks at a minimum level first). Only checked on first construction
-  // (currentLevel === 0) — once built, later upgrades don't re-check this,
-  // matching how the reference genre treats prerequisites as a one-time gate.
+  // (currentLevel === 0) — once built, later upgrades don't re-check this.
   if (currentLevel === 0) {
     const prereqs = getBuildingPrerequisites(nk, req.buildingId);
     for (const prereq of prereqs) {
@@ -97,32 +112,23 @@ export function rpcUpgradeBuilding(
   state.resources.mithril -= levelCfg.cost_mithril;
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const newInstance = {
-    buildingId: req.buildingId,
-    slot: req.slot,
-    level: currentLevel, // level only increments on completion, see completeFinishedUpgrades()
-    upgradeFinishTick: nowSeconds + levelCfg.upgrade_time_seconds,
-  };
-  state.buildings[key] = newInstance;
+  existing.upgradeFinishTick = nowSeconds + levelCfg.upgrade_time_seconds;
 
   // Volume 2 §15: Castle is the one building-ID-specific branch in this
   // otherwise-generic RPC, since KingdomState.castleLevel is a top-level
-  // field gating every other building's unlock_castle_level. Synced here at
-  // request time so an in-progress Castle upgrade's target level is visible
-  // immediately; completion-time sync happens in completeFinishedUpgrades().
+  // field gating every other building's unlock_castle_level.
   if (req.buildingId === 'castle' && levelCfg.upgrade_time_seconds === 0) {
-    // Zero-time upgrades (e.g. the free starting level 1) complete instantly
-    // — sync castleLevel right away rather than waiting for a later read.
+    // Zero-time upgrades (e.g. the free starting level 1) complete instantly.
     state.castleLevel = targetLevel;
-    newInstance.level = targetLevel;
-    newInstance.upgradeFinishTick = null;
+    existing.level = targetLevel;
+    existing.upgradeFinishTick = null;
   }
 
   writeKingdomState(nk, userId, state);
 
   return respond({
     ok: true,
-    building: newInstance,
+    building: existing,
     resources: state.resources,
   });
 }
@@ -142,6 +148,27 @@ export function completeFinishedUpgrades(state: KingdomState): KingdomState {
     }
   }
   return state;
+}
+
+// 0005: sum of stat_value across every built (level >= 1) Builder Hut —
+// this is the player's total concurrent building-upgrade capacity.
+function getBuilderHutCapacity(nk: nkruntime.Nakama, state: KingdomState): number {
+  let capacity = 0;
+  for (const key in state.buildings) {
+    const b = state.buildings[key];
+    if (b.buildingId !== 'builder_hut' || b.level < 1) continue;
+    const levelCfg = getBuildingLevelConfig(nk, 'builder_hut', b.level);
+    if (levelCfg && levelCfg.stat_value !== null) capacity += levelCfg.stat_value;
+  }
+  return capacity;
+}
+
+function countInProgressUpgrades(state: KingdomState): number {
+  let count = 0;
+  for (const key in state.buildings) {
+    if (state.buildings[key].upgradeFinishTick !== null) count++;
+  }
+  return count;
 }
 
 function playerHasBuildingAtLevel(state: KingdomState, buildingId: string, minLevel: number): boolean {

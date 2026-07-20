@@ -10,7 +10,7 @@ export interface ResourceBundle {
 
 export interface BuildingInstance {
   buildingId: string;
-  slot: string;                 // city grid position identifier, e.g. "3_2"
+  slot: string;                 // 0005: "x_y" grid coordinate (top-left corner), NOT a building_slot lookup key anymore
   level: number;
   upgradeFinishTick: number | null; // unix seconds; null if not currently upgrading
 }
@@ -36,7 +36,25 @@ export interface BuildingConfigRow {
   category: string;
   unlock_castle_level: number;
   resource_type: 'gold' | 'crystal' | 'mithril' | null; // Volume 2 §2.3
-  effect_type: 'production' | 'storage_cap' | 'troop_capacity' | 'defense_stat' | 'utility'; // Volume 2 §2.3
+  effect_type: 'production' | 'storage_cap' | 'troop_capacity' | 'defense_stat' | 'defense_active' | 'utility' | 'concurrency_cap';
+  footprint_width: number;   // 0005: grid tiles wide
+  footprint_height: number;  // 0005: grid tiles tall
+}
+
+export interface BuildingUnlockConfigRow {
+  building_id: string;
+  unlock_castle_level: number;
+  is_starter_building: boolean;
+}
+
+// x/y are the building's top-left grid coordinate (0005 freeform placement).
+// "slot" field is kept as the storage key format ("x_y") for backward
+// compatibility with how BuildingInstance keys work — it's no longer a
+// lookup into building_slot, just a coordinate string.
+export interface PlaceBuildingRequest {
+  buildingId: string;
+  x: number;
+  y: number;
 }
 
 export interface BuildingLevelConfigRow {
