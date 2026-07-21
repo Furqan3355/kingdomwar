@@ -1,3 +1,4 @@
+// modules/main.ts
 import { afterAuthenticate } from './auth/hooks';
 import { rpcUpgradeBuilding } from './economy/buildings';
 import { rpcGetFullState } from './economy/get_full_state';
@@ -6,6 +7,9 @@ import { rpcAdminCleanupBuildings } from './economy/admin_cleanup';
 import { rpcGetWorldView } from './worldmap/tiles';
 import { rpcStartMarch, rpcRecallMarch, rpcSweepMarchArrivals } from './worldmap/marches';
 import { rpcTeleportCastle } from './worldmap/teleport';
+import { rpcAcquireHero, rpcGetHeroRoster, rpcLevelUpHero, rpcAscendHero } from './heroes/roster';
+import { rpcEquipItem, rpcUnequipItem } from './heroes/equipment';
+import { rpcChangeFaction } from './heroes/factions';
 
 const InitModule: nkruntime.InitModule = function (
   ctx: nkruntime.Context,
@@ -40,6 +44,17 @@ const InitModule: nkruntime.InitModule = function (
   // deploying anywhere clients can reach it directly, same caution as
   // admin_cleanup_buildings above.
   initializer.registerRpc('sweep_march_arrivals', rpcSweepMarchArrivals);
+
+  // Volume 4: Heroes (customized — faction-mirrored roster, see heroes/*.ts)
+  initializer.registerRpc('get_hero_roster', rpcGetHeroRoster);
+  initializer.registerRpc('acquire_hero', rpcAcquireHero);
+  initializer.registerRpc('level_up_hero', rpcLevelUpHero);
+  initializer.registerRpc('ascend_hero', rpcAscendHero);
+  initializer.registerRpc('equip_item', rpcEquipItem);
+  initializer.registerRpc('unequip_item', rpcUnequipItem);
+  // Custom addition beyond the original Vol4 doc — lets a player spend a
+  // faction_change_card item to switch factions (§ discussed with user).
+  initializer.registerRpc('change_faction', rpcChangeFaction);
 
   logger.info('Storm MMORTS Volume 1 modules loaded');
 };

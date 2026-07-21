@@ -5,6 +5,7 @@ import { readKingdomState, writeKingdomState, readAndResolveKingdomState } from 
 import { completeFinishedUpgrades } from '../economy/buildings';
 import { CURRENT_STATE_VERSION } from "../economy/version";
 import { claimTile } from '../worldmap/tiles';
+import { assignRandomFaction } from '../heroes/factions';
 
 // Registered against every authenticateX hook in main.ts. Runs for both
 // new and returning players — branches on whether kingdom state exists.
@@ -42,6 +43,16 @@ export function afterAuthenticate(
   if (!hasWorldMapCastle(nk, completed.shardId, userId)) {
     claimStartingWorldTile(nk, logger, completed.shardId, userId);
     logger.info('backfilled Volume 3 world-map castle tile for existing player %s', userId);
+  }
+
+  // Volume 4 backfill: same self-heal pattern for accounts created before
+  // factions existed. writeKingdomState below re-persists 'completed' —
+  // mutate it in place before that write so this doesn't need its own
+  // separate storage round trip.
+  if (!completed.factionId) {
+    completed.factionId = assignRandomFaction();
+    writeKingdomState(nk, userId, completed);
+    logger.info('backfilled Volume 4 faction (%s) for existing player %s', completed.factionId, userId);
   }
 }
 
@@ -98,6 +109,7 @@ function initializeNewPlayer(
     allianceId: null,
     displayName: `Warlord${userId.substring(0, 6)}`,
     power: 0,
+    factionId: assignRandomFaction(),
   };
 
   writeKingdomState(nk, userId, startingState);

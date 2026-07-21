@@ -30,6 +30,7 @@ export interface KingdomState {
   allianceId: string | null;
   displayName: string;
   power: number;
+  factionId: string; // Volume 4 custom: 'fire' | 'water' | 'earth' | 'air', assigned randomly at creation
 }
 
 export interface BuildingConfigRow {
