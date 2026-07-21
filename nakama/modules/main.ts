@@ -1,9 +1,11 @@
-// modules/main.ts
 import { afterAuthenticate } from './auth/hooks';
 import { rpcUpgradeBuilding } from './economy/buildings';
 import { rpcGetFullState } from './economy/get_full_state';
 import { rpcPlaceBuilding } from './economy/placement';
 import { rpcAdminCleanupBuildings } from './economy/admin_cleanup';
+import { rpcGetWorldView } from './worldmap/tiles';
+import { rpcStartMarch, rpcRecallMarch, rpcSweepMarchArrivals } from './worldmap/marches';
+import { rpcTeleportCastle } from './worldmap/teleport';
 
 const InitModule: nkruntime.InitModule = function (
   ctx: nkruntime.Context,
@@ -26,6 +28,18 @@ const InitModule: nkruntime.InitModule = function (
   // Lock this down to admin-only callers before deploying, and it can be
   // unregistered again once the cleanup sweep has been run.
   initializer.registerRpc('admin_cleanup_buildings', rpcAdminCleanupBuildings)
+
+  // Volume 3: World Map
+  initializer.registerRpc('get_world_view', rpcGetWorldView);
+  initializer.registerRpc('start_march', rpcStartMarch);
+  initializer.registerRpc('recall_march', rpcRecallMarch);
+  initializer.registerRpc('teleport_castle', rpcTeleportCastle);
+  // Not meant to be called by game clients — hit by an external cron
+  // (e.g. a scheduled curl from docker-compose or a k8s CronJob) every
+  // 5-10s. Lock this down (admin key / internal-network-only) before
+  // deploying anywhere clients can reach it directly, same caution as
+  // admin_cleanup_buildings above.
+  initializer.registerRpc('sweep_march_arrivals', rpcSweepMarchArrivals);
 
   logger.info('Storm MMORTS Volume 1 modules loaded');
 };

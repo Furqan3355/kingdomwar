@@ -1,4 +1,4 @@
  $deviceId = "test-device-1784455963.72343"                        
->> "{`"id`": `"$deviceId`"}" | Out-File -Encoding ascii body.json                                
->> $response = curl.exe -s "http://127.0.0.1:7350/v2/account/authenticate/device?create=true" -u "defaultkey:" -H "Content-Type: application/json" -d "@body.json" | ConvertFrom-Json
->> $token = $response.token
+ "{`"id`": `"$deviceId`"}" | Out-File -Encoding ascii body.json                                
+ $response = curl.exe -s "http://127.0.0.1:7350/v2/account/authenticate/device?create=true" -u "defaultkey:" -H "Content-Type: application/json" -d "@body.json" | ConvertFrom-Json
+ $token = $response.token
