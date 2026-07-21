@@ -95,6 +95,24 @@ export function rpcPlaceBuilding(
     return respond({ ok: false, error: 'already_placed_here' });
   }
 
+  // Singleton guard: some building types must never exist more than once
+  // per player (Castle is the obvious one — castleLevel is a single
+  // top-level field keyed off it; Command Center is documented in 0004 as
+  // "singleton" too). Pre-0005 this was implicit for free, since the old
+  // building_slot table bound exactly one slot per building_id. Freeform
+  // (x,y) placement removed that guarantee, so it has to be checked
+  // explicitly here — otherwise a second place_building call with the same
+  // buildingId but a different empty (x,y) sails through both the overlap
+  // check and the duplicate-key check above and creates a second instance.
+  const SINGLETON_BUILDINGS = ['castle', 'command_center'];
+  if (SINGLETON_BUILDINGS.indexOf(req.buildingId) !== -1) {
+    for (const k in state.buildings) {
+      if (state.buildings[k].buildingId === req.buildingId) {
+        return respond({ ok: false, error: 'already_owns_singleton_building' });
+      }
+    }
+  }
+
   state.buildings[key] = {
     buildingId: req.buildingId,
     slot: slotKey,

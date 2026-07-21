@@ -1,6 +1,7 @@
 // modules/economy/resources.ts
 import { KingdomState, KINGDOM_COLLECTION, KINGDOM_KEY } from '../types';
 import { getBuildingLevelConfig, getBuildingConfig, getStorageCapForResource } from '../config/loader';
+import { migrateState } from './migrations';
 
 // Implements the lazy-resolve production pattern from Volume 1 §5/§7.1:
 // resources are computed from (stored + rate * elapsed) on every read,
@@ -13,7 +14,10 @@ export function readKingdomState(nk: nkruntime.Nakama, userId: string): KingdomS
   if (!objects || objects.length === 0) {
     return null;
   }
-  return objects[0].value as KingdomState;
+  // Apply pending migrations before this state is used anywhere — otherwise
+  // states saved under an older shape (e.g. missing stateVersion) flow into
+  // RPCs like upgrade_building with fields the current code assumes exist.
+  return migrateState(objects[0].value as KingdomState);
 }
 
 // Applies lazy production resolve in-memory. Does NOT write back — callers

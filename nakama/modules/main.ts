@@ -3,6 +3,7 @@ import { afterAuthenticate } from './auth/hooks';
 import { rpcUpgradeBuilding } from './economy/buildings';
 import { rpcGetFullState } from './economy/get_full_state';
 import { rpcPlaceBuilding } from './economy/placement';
+import { rpcAdminCleanupBuildings } from './economy/admin_cleanup';
 
 const InitModule: nkruntime.InitModule = function (
   ctx: nkruntime.Context,
@@ -21,6 +22,10 @@ const InitModule: nkruntime.InitModule = function (
   initializer.registerRpc('get_full_state', rpcGetFullState);
   initializer.registerRpc('upgrade_building', rpcUpgradeBuilding);
   initializer.registerRpc('place_building',rpcPlaceBuilding)
+  // One-time admin repair for the duplicate-castle / orphan-building bug.
+  // Lock this down to admin-only callers before deploying, and it can be
+  // unregistered again once the cleanup sweep has been run.
+  initializer.registerRpc('admin_cleanup_buildings', rpcAdminCleanupBuildings)
 
   logger.info('Storm MMORTS Volume 1 modules loaded');
 };

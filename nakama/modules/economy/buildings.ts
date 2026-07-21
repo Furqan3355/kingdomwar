@@ -37,9 +37,16 @@ export function rpcUpgradeBuilding(
 
   // Rule §17: always resolve current authoritative state before validating.
   const state = readAndResolveKingdomState(nk, userId);
+  
   completeFinishedUpgrades(state);
   const key = buildingKey(req.buildingId, req.slot);
   const existing = state.buildings[key];
+  logger.info("UserId: %s", userId);
+logger.info("Buildings: %s", JSON.stringify(state.buildings));
+
+
+logger.info("Lookup key: %s", key);
+logger.info("Found: %s", state.buildings[key] ? "YES" : "NO");
 
   // 0005: buildings must be placed (place_building) before they can be
   // upgraded — this RPC never creates a new instance implicitly anymore.

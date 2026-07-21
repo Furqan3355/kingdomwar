@@ -18,15 +18,18 @@ export interface BuildingInstance {
 export interface KingdomState {
   userId: string;
   shardId: number;
+
+  stateVersion: number;
+
   castleLevel: number;
-  buildings: Record<string, BuildingInstance>; // keyed by `${buildingId}:${slot}`
+  buildings: Record<string, BuildingInstance>;
   resources: ResourceBundle;
-  lastCalculatedTick: number;   // unix seconds, for lazy production resolve
-  army: Record<string, number>; // unitId -> count, garrisoned only (Vol.5 expands this)
+  lastCalculatedTick: number;
+  army: Record<string, number>;
   researchLevels: Record<string, number>;
   allianceId: string | null;
   displayName: string;
-  power: number;                // cached/derived, recalculated on write (§7.2)
+  power: number;
 }
 
 export interface BuildingConfigRow {

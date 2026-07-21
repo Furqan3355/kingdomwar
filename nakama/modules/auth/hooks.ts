@@ -3,6 +3,7 @@ import { KingdomState, KINGDOM_COLLECTION, KINGDOM_KEY } from '../types';
 import { getLowestPopulationOpenShard } from '../config/loader';
 import { readKingdomState, writeKingdomState, readAndResolveKingdomState } from '../economy/resources';
 import { completeFinishedUpgrades } from '../economy/buildings';
+import { CURRENT_STATE_VERSION } from "../economy/version";
 
 // Registered against every authenticateX hook in main.ts. Runs for both
 // new and returning players — branches on whether kingdom state exists.
@@ -13,6 +14,11 @@ export function afterAuthenticate(
   data: any
 ): void {
   const userId = ctx.userId;
+  if (!userId) {
+    logger.error('afterAuthenticate fired with no ctx.userId — skipping kingdom init/resolve');
+    return;
+  }
+
   const existing = readKingdomState(nk, userId);
 
   if (!existing) {
@@ -48,6 +54,7 @@ function initializeNewPlayer(
   const startingState: KingdomState = {
     userId,
     shardId,
+     stateVersion: CURRENT_STATE_VERSION,
     castleLevel: 1,
     buildings: {
       'castle:2_12':        { buildingId: 'castle',        slot: '2_12', level: 1, upgradeFinishTick: null },
