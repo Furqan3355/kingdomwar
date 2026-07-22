@@ -25,12 +25,60 @@ export interface KingdomState {
   buildings: Record<string, BuildingInstance>;
   resources: ResourceBundle;
   lastCalculatedTick: number;
-  army: Record<string, number>;
+  army: Record<string, number>;   // unitId -> garrisoned count (Volume 5: keys are unit_config.unit_id, e.g. 'knight')
   researchLevels: Record<string, number>;
   allianceId: string | null;
   displayName: string;
   power: number;
   factionId: string; // Volume 4 custom: 'fire' | 'water' | 'earth' | 'air', assigned randomly at creation
+
+  // --- Volume 5: Army System ---
+  hospital: HospitalState;
+  // Battlefield render-group size (§ Unit Size / Render Grouping). How many
+  // actual troops of the same unit_id collapse into one rendered "stack".
+  // Default 1 (no grouping) for every new player — Research-volume raises
+  // this later (stub field only, Research itself is out of Vol5's scope).
+  unitSize: number;
+}
+
+// Volume 5 §1: custom fixed roster (melee/range/elite), NOT the original
+// doc's infantry/archer/cavalry/siege archetype-counter design.
+export interface UnitConfigRow {
+  unit_id: string;
+  display_name: string;
+  category: 'melee' | 'range' | 'elite';
+  slot_cost: number;        // 1 normally, 3 for 'elite' — consumed everywhere a count is capped
+  tier: number;
+  base_attack: number;
+  base_defense: number;
+  base_health: number;
+  attack_speed: number;             // Volume 6 combat data — unused by any Vol5 logic
+  battlefield_move_speed: number;   // Volume 6 combat data — NOT world-map march speed (that's fixed, Vol3)
+  train_time_seconds: number;
+  train_cost_gold: number;
+  train_cost_crystal: number;
+  train_cost_mithril: number;
+  upkeep_gold_per_hour: number;
+  // Hospital heal queue (redesigned to mirror Training exactly, just
+  // cheaper/faster — see 0009_hospital_queue.sql).
+  heal_time_seconds: number;
+  heal_cost_gold: number;
+  heal_cost_crystal: number;
+  heal_cost_mithril: number;
+}
+
+export interface UnitUnlockConfigRow {
+  unit_id: string;
+  unlock_castle_level: number;
+}
+
+// Volume 5 §3: Hospital holds wounded troops from DEFENSIVE losses only.
+// Held as a field on KingdomState (not its own collection) — wounded counts
+// change at the same moments as garrisoned army counts (combat resolution,
+// healing), same reasoning Volume 2/3 use for keeping tightly-coupled state
+// together rather than fragmenting write paths unnecessarily.
+export interface HospitalState {
+  woundedTroops: Record<string, number>; // unitId -> wounded count awaiting heal
 }
 
 export interface BuildingConfigRow {
@@ -70,7 +118,7 @@ export interface BuildingLevelConfigRow {
   cost_mithril: number;
   production_rate: number | null;
   stat_value: number | null;           // Volume 2 §2.4: storage cap / troop capacity / defense stat
-  secondary_stat_value: number | null; // Volume 2 §3.3: Hospital's heal_rate_per_hour only
+  secondary_stat_value: number | null; // Hospital: heal queue slot count (0009); other buildings: see per-row usage
 }
 
 export interface BuildingPrerequisite {

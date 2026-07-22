@@ -1,5 +1,5 @@
 // modules/config/loader.ts
-import { BuildingConfigRow, BuildingLevelConfigRow, BuildingPrerequisite, SlotBinding, BuildingUnlockConfigRow } from '../types';
+import { BuildingConfigRow, BuildingLevelConfigRow, BuildingPrerequisite, SlotBinding, BuildingUnlockConfigRow, UnitConfigRow, UnitUnlockConfigRow } from '../types';
 
 // These reads hit the *authoritative* config tables described in Volume 1 §5/§9.
 // The client's ScriptableObject-derived copy is display-only; every RPC that
@@ -152,6 +152,66 @@ export function getAllBuildingLevels(
     stat_value: row.stat_value === null ? null : Number(row.stat_value),
     secondary_stat_value: row.secondary_stat_value === null ? null : Number(row.secondary_stat_value),
   }));
+}
+
+// --- Volume 5: Army System ---
+
+export function getUnitConfig(nk: nkruntime.Nakama, unitId: string): UnitConfigRow | null {
+  const result = nk.sqlQuery(
+    `SELECT unit_id, display_name, category, slot_cost, tier, base_attack, base_defense,
+            base_health, attack_speed, battlefield_move_speed, train_time_seconds,
+            train_cost_gold, train_cost_crystal, train_cost_mithril, upkeep_gold_per_hour,
+            heal_time_seconds, heal_cost_gold, heal_cost_crystal, heal_cost_mithril
+     FROM unit_config WHERE unit_id = $1`,
+    [unitId]
+  );
+  if (!result || result.length === 0) return null;
+  return rowToUnitConfig(result[0]);
+}
+
+export function getAllUnitConfigs(nk: nkruntime.Nakama): UnitConfigRow[] {
+  const result = nk.sqlQuery(
+    `SELECT unit_id, display_name, category, slot_cost, tier, base_attack, base_defense,
+            base_health, attack_speed, battlefield_move_speed, train_time_seconds,
+            train_cost_gold, train_cost_crystal, train_cost_mithril, upkeep_gold_per_hour,
+            heal_time_seconds, heal_cost_gold, heal_cost_crystal, heal_cost_mithril
+     FROM unit_config`,
+    []
+  );
+  return (result || []).map(rowToUnitConfig);
+}
+
+function rowToUnitConfig(row: any): UnitConfigRow {
+  return {
+    unit_id: row.unit_id,
+    display_name: row.display_name,
+    category: row.category,
+    slot_cost: Number(row.slot_cost),
+    tier: Number(row.tier),
+    base_attack: Number(row.base_attack),
+    base_defense: Number(row.base_defense),
+    base_health: Number(row.base_health),
+    attack_speed: Number(row.attack_speed),
+    battlefield_move_speed: Number(row.battlefield_move_speed),
+    train_time_seconds: Number(row.train_time_seconds),
+    train_cost_gold: Number(row.train_cost_gold),
+    train_cost_crystal: Number(row.train_cost_crystal),
+    train_cost_mithril: Number(row.train_cost_mithril),
+    upkeep_gold_per_hour: Number(row.upkeep_gold_per_hour),
+    heal_time_seconds: Number(row.heal_time_seconds),
+    heal_cost_gold: Number(row.heal_cost_gold),
+    heal_cost_crystal: Number(row.heal_cost_crystal),
+    heal_cost_mithril: Number(row.heal_cost_mithril),
+  };
+}
+
+export function getUnitUnlockConfig(nk: nkruntime.Nakama, unitId: string): UnitUnlockConfigRow | null {
+  const result = nk.sqlQuery(
+    `SELECT unit_id, unlock_castle_level FROM unit_unlock_config WHERE unit_id = $1`,
+    [unitId]
+  );
+  if (!result || result.length === 0) return null;
+  return { unit_id: result[0].unit_id, unlock_castle_level: Number(result[0].unlock_castle_level) };
 }
 
 export function getLowestPopulationOpenShard(nk: nkruntime.Nakama): number {

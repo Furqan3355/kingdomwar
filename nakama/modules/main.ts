@@ -10,6 +10,9 @@ import { rpcTeleportCastle } from './worldmap/teleport';
 import { rpcAcquireHero, rpcGetHeroRoster, rpcLevelUpHero, rpcAscendHero } from './heroes/roster';
 import { rpcEquipItem, rpcUnequipItem } from './heroes/equipment';
 import { rpcChangeFaction } from './heroes/factions';
+import { rpcTrainTroops } from './army/training';
+import { rpcHealTroops } from './army/hospital';
+import { rpcSendReinforcement, rpcRecallReinforcement } from './army/reinforcement';
 
 const InitModule: nkruntime.InitModule = function (
   ctx: nkruntime.Context,
@@ -55,6 +58,13 @@ const InitModule: nkruntime.InitModule = function (
   // Custom addition beyond the original Vol4 doc — lets a player spend a
   // faction_change_card item to switch factions (§ discussed with user).
   initializer.registerRpc('change_faction', rpcChangeFaction);
+
+  // Volume 5: Army System (custom roster, elite-3-slots, hospital %-heal,
+  // temple/fortress/citadel-only reinforcement — see army/*.ts)
+  initializer.registerRpc('train_troops', rpcTrainTroops);
+  initializer.registerRpc('heal_troops', rpcHealTroops);
+  initializer.registerRpc('send_reinforcement', rpcSendReinforcement);
+  initializer.registerRpc('recall_reinforcement', rpcRecallReinforcement);
 
   logger.info('Storm MMORTS Volume 1 modules loaded');
 };

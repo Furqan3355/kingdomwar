@@ -36,7 +36,14 @@ export type TileType =
   | 'player_castle'
   | 'neutral_monster'
   | 'boss_monster'
-  | 'alliance_territory';
+  | 'alliance_territory'
+  // Volume 5: reinforceable structures. These are the ONLY tile types
+  // rpcSendReinforcement (army/reinforcement.ts) will accept as a target —
+  // reinforcing a plain player_castle is not possible, per the confirmed
+  // design ("sirf Temple/Fortress/Citadel").
+  | 'temple'
+  | 'fortress'
+  | 'citadel';
 
 export interface WorldTile {
   shardId: number;

@@ -1,4 +1,30 @@
-# Storm MMORTS — Volume 1 Implementation
+Storm MMORTS — Progress Status
+
+> Last updated 2026-07-21. Backend-first workflow: each volume's Nakama/Postgres
+> side is fully built and curl-tested before its Unity pass. Unity has only
+> been touched for Volume 1/2 (City system) so far.
+
+## Status by volume
+
+| Volume | Backend code | DB migration | Seed/test data | curl-tested | Unity |
+|---|---|---|---|---|---|
+| Vol 1 — Core Architecture | ✅ Done | `0001_init.sql` | ✅ | ✅ | ✅ (Boot→City) |
+| Vol 2 — City System | ✅ Done | `0002`–`0005` | ✅ | ✅ | ✅ (CityGridController etc.) |
+| Vol 3 — World Map | ✅ Done | `0006_world_map.sql` | ✅ | ✅ (`get_world_view`, backfill confirmed; march/recall/teleport spot-checked) | ❌ Not started |
+| Vol 4 — Heroes | ✅ Code written (roster/equipment/factions RPCs) | `0007_heroes.sql` applied | ⚠️ **NOT seeded** — `hero_config`/`hero_rarity_config`/`hero_ascension_config` are empty, so `acquire_hero` currently fails with `unknown_hero_family_for_faction` | ❌ **In progress — paused here** | ❌ Not started |
+| Vol 5 — Army System | 📖 Design read, not yet implemented | — | — | — | — |
+
+**Currently paused at: Volume 4 hero testing.** Code is written and deployed
+(migration applied, RPCs registered in Nakama logs), but no hero/rarity/
+ascension rows exist in Postgres yet, so `acquire_hero` and everything
+downstream of it (`level_up_hero`, `ascend_hero`, `equip_item`) can't be
+exercised until test seed data is inserted. **Next session: pick up here —
+insert the seed SQL (guardian family × 4 factions + rarity config +
+ascension config), then re-run the acquire → level_up → ascend →
+change_faction curl sequence.**
+
+Original Volume 1/2 description below still applies to the earliest layer of
+the stack:
 
 Reference implementation of **Volume 1 (Core Architecture) + Volume 2 (City
 System)** from the TDD. Covers: Nakama/Postgres backend, auth + new-player
@@ -15,20 +41,34 @@ storm-mmorts/
 ├── nakama/
 │   ├── package.json / tsconfig.json
 │   └── modules/
-│       ├── main.ts                  (registers hooks + RPCs)
-│       ├── types.ts                 (KingdomState, BuildingInstance, ...)
-│       ├── auth/hooks.ts            (afterAuthenticate, new player init)
+│       ├── main.ts                  (registers hooks + RPCs, Vol1-4)
+│       ├── types.ts                 (KingdomState incl. factionId, BuildingInstance, ...)
+│       ├── auth/hooks.ts            (afterAuthenticate, new player init + backfill for Vol3/Vol4)
 │       ├── config/loader.ts         (Postgres config reads)
-│       └── economy/
-│           ├── resources.ts         (lazy production resolve)
-│           ├── buildings.ts         (upgrade_building RPC)
-│           └── get_full_state.ts    (aggregated session-start RPC)
-├── postgres/migrations/0001_init.sql
+│       ├── economy/
+│       │   ├── resources.ts         (lazy production resolve)
+│       │   ├── buildings.ts         (upgrade_building RPC)
+│       │   └── get_full_state.ts    (aggregated session-start RPC, real heroes roster wired in)
+│       ├── worldmap/                (Volume 3 — World Map)
+│       │   ├── types.ts             (TileCoord, ArmyMarch, Chebyshev distance)
+│       │   ├── tiles.ts             (atomic tile claim, viewport query, get_world_view)
+│       │   ├── marches.ts           (start_march, recall_march, sweep_march_arrivals)
+│       │   └── teleport.ts          (teleport_castle)
+│       └── heroes/                  (Volume 4 — Heroes; code done, NOT seeded yet — see status table)
+│           ├── types.ts             (HeroInstance, EquipmentInstance, FactionId)
+│           ├── config.ts            (Postgres config readers)
+│           ├── roster.ts            (acquire/level_up/ascend_hero, get_hero_roster)
+│           ├── equipment.ts         (equip/unequip_item, inventory helpers)
+│           └── factions.ts          (random faction assignment, change_faction)
+├── postgres/migrations/
+│   ├── 0001_init.sql ... 0005_freeform_placement.sql   (Vol 1-2)
+│   ├── 0006_world_map.sql                              (Vol 3)
+│   └── 0007_heroes.sql                                 (Vol 4 — tables only, no seed rows)
 ├── tools/
 │   ├── apply_custom_migrations.sh
 │   ├── export_config.js             (ScriptableObject-JSON -> SQL)
 │   └── sample-config.json
-└── unity/Assets/_Project/Scripts/
+└── unity/Assets/_Project/Scripts/    (Vol 1-2 only — Vol 3/4 Unity not started)
     ├── Core/Services.cs
     ├── Networking/NakamaClientService.cs
     ├── Data/KingdomModels.cs, PlayerDataService.cs

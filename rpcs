@@ -1,0 +1,188 @@
+# KingdomWar — Full RPC Reference & curl Commands
+
+Base URL: `http://127.0.0.1:7350/v2/rpc/<rpc_name>`
+Har request: `-H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '\"<escaped-json>\"'`
+
+PowerShell mein backtick (`` ` ``) line-continuation, aur payload double-escaped (`\\\"`) hota hai jaisa neeche hai.
+
+---
+
+## Authentication
+
+```powershell
+$response = curl.exe -s "http://127.0.0.1:7350/v2/account/authenticate/device?create=true" -u "defaultkey:" -H "Content-Type: application/json" -d "@body.json" | ConvertFrom-Json
+$token = $response.token
+```
+(`body.json` mein `{"id": "<deviceId>"}` hona chahiye)
+
+---
+
+## Economy / Buildings
+
+### `get_full_state` — poori kingdom state (baseline check, sab yahin milta hai)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/get_full_state" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{}\"'
+```
+
+### `place_building` — nayi building place karo
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/place_building" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"buildingId\\\":\\\"barracks\\\",\\\"x\\\":10,\\\"y\\\":10}\"'
+```
+
+### `upgrade_building` — existing building upgrade karo (buildingId + slot dono zaroori)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/upgrade_building" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"buildingId\\\":\\\"barracks\\\",\\\"slot\\\":\\\"10_10\\\"}\"'
+```
+
+### `admin_cleanup_buildings` — admin/debug tool (dev only)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/admin_cleanup_buildings" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{}\"'
+```
+
+---
+
+## World Map (Volume 3)
+
+### `get_world_view` — nearby tiles dekho
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/get_world_view" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{}\"'
+```
+
+### `start_march` — army bhejo (gather/attack/etc — marchType/origin/target/troops)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/start_march" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"marchType\\\":\\\"gather\\\",\\\"origin\\\":{\\\"x\\\":4,\\\"y\\\":4},\\\"target\\\":{\\\"x\\\":10,\\\"y\\\":10},\\\"troops\\\":{\\\"knight\\\":5}}\"'
+```
+
+### `recall_march` — chalti march wapis bulao
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/recall_march" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"marchId\\\":\\\"YOUR_MARCH_ID\\\"}\"'
+```
+
+### `teleport_castle` — castle move karo world map pe
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/teleport_castle" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"targetX\\\":20,\\\"targetY\\\":20}\"'
+```
+
+### `sweep_march_arrivals` — lazy-resolve marches (usually auto-called, manual bhi chala sakte ho)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/sweep_march_arrivals" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{}\"'
+```
+
+---
+
+## Heroes (Volume 4)
+
+### `get_hero_roster` — apne heroes dekho
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/get_hero_roster" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{}\"'
+```
+
+### `acquire_hero` — naya hero summon/acquire karo
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/acquire_hero" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"heroFamily\\\":\\\"guardian\\\"}\"'
+```
+
+### `level_up_hero`
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/level_up_hero" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"instanceId\\\":\\\"YOUR_HERO_INSTANCE_ID\\\"}\"'
+```
+
+### `ascend_hero`
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/ascend_hero" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"instanceId\\\":\\\"YOUR_HERO_INSTANCE_ID\\\"}\"'
+```
+
+### `equip_item` / `unequip_item`
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/equip_item" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"instanceId\\\":\\\"YOUR_HERO_INSTANCE_ID\\\",\\\"itemId\\\":\\\"YOUR_ITEM_ID\\\"}\"'
+```
+
+### `change_faction`
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/change_faction" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"newFactionId\\\":\\\"fire\\\"}\"'
+```
+
+---
+
+## Army System (Volume 5 — NEW)
+
+### `train_troops` — troops train karo, **buildingSlot zaroori hai** (per-Barracks queue)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/train_troops" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"unitId\\\":\\\"knight\\\",\\\"quantity\\\":10,\\\"buildingSlot\\\":\\\"10_10\\\"}\"'
+```
+Errors: `summon_hut_required`, `no_such_barracks_at_slot`, `queue_full`, `unknown_unit`, `army_cap_exceeded`, `insufficient_resources`
+Note: units **trickle in one at a time** as each one's `train_time_seconds` elapses — not all at once at the end.
+
+### `heal_troops` — wounded troops heal karo, **buildingSlot zaroori hai** (per-Hospital queue)
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/heal_troops" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"unitId\\\":\\\"knight\\\",\\\"quantity\\\":5,\\\"buildingSlot\\\":\\\"12_12\\\"}\"'
+```
+Errors: `summon_hut_required`, `no_such_hospital_at_slot`, `heal_queue_full`, `insufficient_wounded`, `unknown_unit`, `insufficient_resources`
+Note: same trickle behavior as training — units return to `army` one at a time.
+
+### `send_reinforcement` — troops kisi Temple/Fortress/Citadel ko bhejo
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/send_reinforcement" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"x\\\":5,\\\"y\\\":5,\\\"troops\\\":{\\\"knight\\\":3}}\"'
+```
+Errors: `not_reinforceable_target` (agar tile temple/fortress/citadel nahi hai), `insufficient_troops:<unitId>`, `structure_garrison_full`
+
+### `recall_reinforcement` — bheji hui reinforcement wapis bulao
+```powershell
+curl.exe -s -X POST "http://127.0.0.1:7350/v2/rpc/recall_reinforcement" `
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" `
+  -d '\"{\\\"x\\\":5,\\\"y\\\":5}\"'
+```
+Errors: `no_garrison_here`
+
+---
+
+## Testing Notes / Gotchas
+
+1. **Naye account** ko `summon_hut` + `builder_hut` free milte hain (level 1). **Purane accounts** (Vol5 se pehle bane) ko manually place karna padta hai.
+2. Summon Hut sirf **hona chahiye** (koi bhi level, 0 bhi chalega) — training/healing dono ke liye gate hai, lekin khud koi stat/slot nahi deta.
+3. Har Barracks/Hospital **apna alag queue** rakhta hai (`buildingSlot` se) — do Barracks ho to dono independent hain, capacity share nahi hoti.
+4. Army cap (kitni total troops rakh sakte ho) abhi bhi **saari Barracks milaake** ek overall total hai — sirf queue-slots per-building hain.
+5. Training/Healing **trickle** hoti hai — quantity 10 ho to 10 alag-alag waqt pe har unit aata hai (na ke sab ek sath aakhir mein).
+6. Unit unlock **castle-level se gated nahi hai** abhi — sab units training ke liye available hain. Asli unlock Research/Academy volume se aayega (abhi tak nahi bana).
+7. Wounded troops manually banane ka koi RPC nahi hai — Volume 6 (Combat) ke bina, testing ke liye direct SQL se `hospital.woundedTroops` edit karna padta hai:
+   ```powershell
+   $sql = "UPDATE storage SET value = jsonb_set(value, '{hospital,woundedTroops,knight}', '5') WHERE collection='kingdom' AND key='state' AND user_id='YOUR_USER_ID';"
+   $sql | docker compose exec -T postgres psql -U nakama -d nakama
+   ```
+8. Koi "move building" feature nahi hai — `place_building` dobara chalane se naya building banta hai, purana move nahi hota.

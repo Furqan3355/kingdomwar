@@ -110,6 +110,8 @@ function initializeNewPlayer(
     displayName: `Warlord${userId.substring(0, 6)}`,
     power: 0,
     factionId: assignRandomFaction(),
+    hospital: { woundedTroops: {} },
+    unitSize: 1,
   };
 
   writeKingdomState(nk, userId, startingState);

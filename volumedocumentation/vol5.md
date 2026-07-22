@@ -332,3 +332,133 @@ Volume 6's combat resolver returns one `CasualtyReport` per participant (rally o
 ---
 
 *End of Volume 5. Volume 6 (Combat) is now fully unblocked — every input it needs (hero contributions, unit stats, archetype counters, formation priority, march-derived state) has been defined across Volumes 4-5.*
+
+
+# Storm of Wars–Inspired MMORTS
+## Technical Design Document — Volume 5: Army System (FINAL, REDESIGNED)
+### Unity + Nakama
+
+*Builds on Volume 2 (Barracks/Hospital/Summon Hut/Builder Hut building shells), Volume 3 (march mechanics — fixed constant speed, unchanged by this volume), and Volume 4 (hero assignment stub). This replaces the original Vol5 draft entirely — everything below is what actually shipped in code (`nakama/modules/army/*`, migrations `0008_army_system.sql` + `0009_hospital_queue.sql`), including all changes made after initial implementation and testing.*
+
+---
+
+## 1. Unit Roster (custom, NOT infantry/archer/cavalry/siege)
+
+Fixed roster, three categories:
+
+| Category | Units | Slot cost |
+|---|---|---|
+| Melee | Knight, Destroyer, Minotaur | 1 |
+| Range | Archer, Mage, Tempest | 1 |
+| Elite | Lavabomb, Mammoth, Reaper, Anubus | **3** |
+
+`unit_config` holds stats per unit: `base_attack`, `base_defense`, `base_health`, `slot_cost`, plus two fields reserved for **Volume 6 (Combat)** and not read by any Volume 5 logic:
+- `attack_speed`
+- `battlefield_move_speed` — per-unit movement speed *inside* a live fight scene (Clash-of-Clans-style). Unrelated to world-map march speed (§4).
+
+Unlocks gate on Castle level via `unit_unlock_config`.
+
+## 2. Elite = 3 Slots
+
+Every place a troop count is capped — army cap, march composition, structure garrison — counts an Elite unit as **3 slots**, everything else as 1. Single implementation: `computeSlotsUsed()` in `army/formation.ts`.
+
+## 3. Training — PER-BUILDING, TRICKLE
+
+Reworked twice after initial implementation, per direct testing feedback:
+
+**Per-building queue (not a shared pool):** Every `train_troops` call must specify **which Barracks** (`buildingSlot`, e.g. `"10_10"`) the order is queued against. Each Barracks a player owns has its own independent queue-slot capacity (from that specific building's level, via `building_level_config.stat_value`) — a second Barracks elsewhere is a completely separate queue, not shared capacity. Army cap (§ overall troop ceiling) is still a whole-account total across all Barracks combined — only the *queue slot* check is per-building.
+
+**Trickle completion (not all-at-once):** A 10-unit training order does **not** wait for the full batch time and then dump all 10 units into `army` simultaneously. Each unit arrives individually as its own `train_time_seconds` elapses — e.g. Knight (20s/unit) × 10 = the order finishes fully at 200s, but unit #1 lands at 20s, #2 at 40s, and so on. Implemented via `perUnitSeconds` + `creditedQuantity` on `TrainingOrder`, recalculated on every lazy-resolve (`completeFinishedTrainingOrders`), crediting only the newly-elapsed units each time and persisting partial progress so nothing is double-counted or lost.
+
+**Summon Hut gate:** Training requires the player to own a Summon Hut (any level, including 0 — presence-only check, not a stat source, no upgrade needed) — same free-starter building Volume 2 already gives every new player alongside Builder Hut. This is purely a hard gate (`summon_hut_required` error if missing), separate from the Barracks-derived queue-slot count.
+
+## 4. World Map March Speed — FIXED CONSTANT, unit-independent
+
+**No change from Volume 3.** `worldmap/marches.ts` still uses a single constant, regardless of troop composition. Research may raise this later (deferred, not implemented). Per-unit `battlefield_move_speed` (§1) only matters once Volume 6's live-fight scenes exist.
+
+## 5. Hospital — PER-BUILDING QUEUE, TRICKLE (redesigned twice)
+
+Hospital was reworked twice from its original concept, both times per explicit user correction:
+
+1. **First version:** passive % of capacity healed per hour, Hospital-level-based. **Rejected** by the user.
+2. **Final version:** Hospital now works **exactly like Training** — its own heal queue, per-building slot tracking, trickle completion:
+   - Each Hospital building has its own heal queue slots (`building_level_config.secondary_stat_value` — redefined in `0009_hospital_queue.sql` to mean "heal queue slot count", no longer "heal % per hour").
+   - Each unit type has its own `heal_time_seconds` + `heal_cost_gold/crystal/mithril` (set to ~40% of that unit's training time/cost — cheaper & faster than training from scratch, since the troop already exists and is just recovering).
+   - `heal_troops` requires a `buildingSlot` (which specific Hospital), same as training — independent queues per Hospital owned.
+   - Healed units **trickle back into `army` one at a time** as each one's `heal_time_seconds` elapses, identical mechanism to training's `perUnitSeconds`/`creditedQuantity` trickle.
+   - Wounded-troop **capacity** (how many can sit in `woundedTroops` at once) is still summed across all Hospitals (shared pool) — only the *queue* side is per-building.
+   - Summon Hut gate applies here too (`summon_hut_required`).
+
+Wounding (moving losses from garrison → `woundedTroops`) still happens in Volume 6's combat resolver, defensive losses only — troops lost while attacking are never salvageable. Losses beyond total Hospital capacity are permanently lost. `woundTroops()` is exported for Volume 6 to call; nothing in Volume 5 calls it yet since combat doesn't exist.
+
+## 6. Reinforcement — Temple / Fortress / Citadel only
+
+New world-map tile types: `temple`, `fortress`, `citadel`. Reinforcement (`army/reinforcement.ts`) only accepts these three as a target — never a plain `player_castle`.
+
+- "Automatic" means the target structure holds any reinforcement sent to it with no approval step — the player still explicitly calls `send_reinforcement`.
+- Garrisons live in their own shared-world table, `structure_garrison` (shard_id, x, y, user_id).
+- Capped per-structure at a slot cap (elite-weighted via `computeSlotsUsed()`).
+- Command Centre gating (mentioned as a future dependency) doesn't exist yet — reinforcement stays unconditional until it lands.
+- Instant-hold once sent — does not go through the Volume 3 march/travel system (a travel-time version is a natural future addition, out of scope here).
+
+## 7. City Attack
+
+Manual live rally (Clash-of-Clans style), unchanged from the original doc — resolution is Volume 6's territory.
+
+## 8. Unit Size / Render-Grouping
+
+Battlefield/city-attack-scene rendering only (not world-map visuals). `computeRenderGroups(troops, unitSize)`:
+
+- `unitSize` = how many real troops of the **same** `unit_id` collapse into one rendered stack. Defaults to **1** (no grouping) — raised later by Research (out of scope, stub field only).
+- Grouping only happens within a single `unit_id` — leftover troops of one type never merge with another type's leftover.
+- A group's combat weight scales with `troopCount / unitSize` — partial-damage groups fight proportionally weaker.
+- Global cap: `max_render_groups` = 50 (`world_config`), across all unit types combined on one scene — enforced by the caller (Volume 6's scene setup).
+
+## 9. `KingdomState` additions
+
+```typescript
+hospital: HospitalState;   // { woundedTroops: Record<string, number> }
+unitSize: number;          // default 1, Research-driven later
+```
+Backfilled for pre-existing accounts via `migrateState()` v2 → v3, `CURRENT_STATE_VERSION` bumped to 3.
+
+## 10. Order shapes (`army/types.ts`)
+
+```typescript
+interface TrainingOrder {
+  orderId: string;
+  buildingSlot: string;      // which specific Barracks this order is queued against
+  unitId: string;
+  quantity: number;
+  perUnitSeconds: number;    // trickle rate — one unit's worth of time
+  creditedQuantity: number;  // how many units already added to `army` so far
+  startTick: number;
+  finishTick: number;        // when the LAST unit finishes (informational — trickle happens continuously before this)
+  status: 'training' | 'complete';
+}
+
+interface HealOrder {
+  orderId: string;
+  buildingSlot: string;      // which specific Hospital this order is queued against
+  unitId: string;
+  quantity: number;
+  perUnitSeconds: number;
+  creditedQuantity: number;
+  startTick: number;
+  finishTick: number;
+  status: 'healing' | 'complete';
+}
+```
+
+## 11. RPCs (`main.ts`)
+
+- `train_troops` — payload: `{ unitId, quantity, buildingSlot }`
+- `heal_troops` — payload: `{ unitId, quantity, buildingSlot }`
+- `send_reinforcement` / `recall_reinforcement` — `army/reinforcement.ts`
+
+## 12. Deferred / out of scope
+
+- Research volume: raises march speed, raises `unitSize`, unlocks higher-tier units — only stub fields/comments left where Research will plug in.
+- Command Centre: reinforcement gating dependency, doesn't exist yet.
+- "Move building" (relocating an already-placed building to a new slot): does not exist as a feature. `place_building` on the same `buildingId` at a new location creates an ADDITIONAL building, it does not relocate an existing one.
+- Volume 6 (Combat): archetype/counter math, `battlefield_move_speed` usage, actual wound-application via `woundTroops()`, render-group cap enforcement in a live scene, the only path by which `hospital.woundedTroops` gets populated (no RPC creates wounded troops manually — testing requires direct SQL injection until Volume 6 exists).

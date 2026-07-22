@@ -51,5 +51,20 @@ export function migrateState(state: KingdomState): KingdomState {
     // per version bump, each ending by incrementing state.stateVersion by
     // exactly 1, so a very old account walks forward through every step.
 
+    // --- v2 -> v3: Volume 5 (Army System). Accounts created before this
+    // volume shipped have no `hospital`/`unitSize` fields at all — backfill
+    // sensible defaults matching what new players get in hooks.ts. `army`
+    // already existed as a field (Volume 1), just untyped by unit_id until
+    // now, so it needs no backfill itself.
+    if (state.stateVersion === 2) {
+        if (!state.hospital) {
+            state.hospital = { woundedTroops: {} };
+        }
+        if (state.unitSize === undefined) {
+            state.unitSize = 1;
+        }
+        state.stateVersion = 3;
+    }
+
     return state;
 }

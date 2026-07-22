@@ -2,6 +2,8 @@
 import { readAndResolveKingdomState } from './resources';
 import { completeFinishedUpgrades } from './buildings';
 import { writeKingdomState } from './resources';
+import { completeFinishedTrainingOrders, getActiveTrainingOrders } from '../army/training';
+import { completeFinishedHealOrders, getActiveHealOrders } from '../army/hospital';
 
 // Single aggregated read on session start (§8.2). Placeholders for
 // army/heroes/alliance are included now with the exact shape later volumes
@@ -20,12 +22,20 @@ export function rpcGetFullState(
 
   const resolved = readAndResolveKingdomState(nk, userId);
   const completed = completeFinishedUpgrades(resolved);
+  // Volume 5: same lazy-resolve philosophy as building upgrades — a client
+  // never has to separately poll "is training done" or "is a heal order
+  // done yet". Hospital now works exactly like Training (queue + per-unit
+  // time/cost), so both complete the same way.
+  completeFinishedHealOrders(nk, userId, completed);
+  completeFinishedTrainingOrders(nk, userId, completed);
   writeKingdomState(nk, userId, completed);
 
   const response = {
     ok: true,
     kingdom: completed,
-    army: [],       // Volume 5 — marching armies live in their own collection
+    trainingQueue: getActiveTrainingOrders(nk, userId),   // Volume 5
+    healQueue: getActiveHealOrders(nk, userId),           // Volume 5 (0009)
+    army: [],       // marching armies (Volume 3 army_march) live in their own collection
     heroes: [],     // Volume 4 — hero roster
     alliance: completed.allianceId ? { id: completed.allianceId, stub: true } : null,
   };

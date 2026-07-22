@@ -1,0 +1,8 @@
+HTTP/1.1 400 Bad Request
+Cache-Control: no-store, no-cache, must-revalidate
+Content-Type: application/json
+Vary: Accept-Encoding
+Date: Wed, 22 Jul 2026 08:07:17 GMT
+Content-Length: 150
+
+{"error":"json: cannot unmarshal object into Go value of type string","message":"json: cannot unmarshal object into Go value of type string","code":3}
