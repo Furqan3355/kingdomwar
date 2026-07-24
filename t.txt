@@ -2,3 +2,8 @@
  "{`"id`": `"$deviceId`"}" | Out-File -Encoding ascii body.json                                
  $response = curl.exe -s "http://127.0.0.1:7350/v2/account/authenticate/device?create=true" -u "defaultkey:" -H "Content-Type: application/json" -d "@body.json" | ConvertFrom-Json
  $token = $response.token
+
+
+
+ migration ka lie 
+ Get-Content postgres\migrations\0010_combat_system.sql | docker compose exec -T postgres psql -U nakama -d nakama

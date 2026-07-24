@@ -13,6 +13,8 @@ import { rpcChangeFaction } from './heroes/factions';
 import { rpcTrainTroops } from './army/training';
 import { rpcHealTroops } from './army/hospital';
 import { rpcSendReinforcement, rpcRecallReinforcement } from './army/reinforcement';
+import { rpcResolveLiveBattle, rpcResolveStructureBattle, rpcWithdrawStationedArmy } from './combat/battle';
+
 
 const InitModule: nkruntime.InitModule = function (
   ctx: nkruntime.Context,
@@ -66,7 +68,14 @@ const InitModule: nkruntime.InitModule = function (
   initializer.registerRpc('send_reinforcement', rpcSendReinforcement);
   initializer.registerRpc('recall_reinforcement', rpcRecallReinforcement);
 
-  logger.info('Storm MMORTS Volume 1 modules loaded');
+  // Volume 6: Combat System (city_attack/skeleton_village/resource_tile
+  // share one live-scene resolver; fortress/temple stay auto-resolved with
+  // an always-combined NPC+stationed defending force — see combat/battle.ts)
+  initializer.registerRpc('resolve_live_battle', rpcResolveLiveBattle);
+  initializer.registerRpc('resolve_structure_battle', rpcResolveStructureBattle);
+  initializer.registerRpc('withdraw_stationed_army', rpcWithdrawStationedArmy);
+
+  logger.info('Storm MMORTS Volume 1-6 modules loaded');
 };
 
 // Nakama's JS VM looks up "InitModule" as a global identifier at startup.

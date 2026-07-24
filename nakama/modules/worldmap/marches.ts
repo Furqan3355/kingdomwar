@@ -5,6 +5,8 @@
 
 import { chebyshevDistance, MarchType, MARCH_SWEEP_BATCH_SIZE, TileCoord } from './types';
 import { readKingdomState } from '../economy/resources';
+import { resolveMarchArrival } from '../combat/arrival';
+import { decodeJsonbField } from '../util/jsonb';
 
 // Design constant — tune per game balance later; kept as a named constant
 // rather than inline so it's obvious where "how fast do armies move" lives.
@@ -18,7 +20,10 @@ function rowToMarch(row: any) {
     marchType: row.march_type,
     origin: { x: Number(row.origin_x), y: Number(row.origin_y) },
     target: { x: Number(row.target_x), y: Number(row.target_y) },
-    troops: row.troops,
+    // See modules/util/jsonb.ts — JSONB troops can come back as a string
+    // OR a byte-array-shaped object depending on runtime behavior; this
+    // handles both instead of only the string case.
+    troops: decodeJsonbField<Record<string, number>>(row.troops),
     departureTick: Number(row.departure_tick),
     arrivalTick: Number(row.arrival_tick),
     status: row.status,
@@ -38,6 +43,26 @@ export function getActiveMarchesForUser(nk: nkruntime.Nakama, userId: string) {
     [userId]
   );
   return (result || []).map(rowToMarch);
+}
+
+// Client-facing wrapper around getActiveMarchesForUser — lets a player see
+// their own currently-in-flight marches (still marching, not yet arrived/
+// resolved). Added for testing/debugging Volume 6 combat, since there was
+// previously no way to query this from outside the server.
+export function rpcGetActiveMarches(
+  ctx: nkruntime.Context,
+  logger: nkruntime.Logger,
+  nk: nkruntime.Nakama,
+  payload: string
+): string {
+  const userId = ctx.userId;
+  if (!userId) return JSON.stringify({ ok: false, error: 'unauthenticated' });
+
+  const marches = getActiveMarchesForUser(nk, userId);
+  const nowTick = Math.floor(Date.now() / 1000);
+  const withEta = marches.map((m) => ({ ...m, secondsRemaining: Math.max(0, m.arrivalTick - nowTick) }));
+
+  return JSON.stringify({ ok: true, count: marches.length, marches: withEta });
 }
 
 export function rpcStartMarch(
@@ -140,6 +165,22 @@ export function rpcSweepMarchArrivals(
     return JSON.stringify({ ok: true, processed: 0 });
   }
 
+  // Volume 6: attack marches trigger real combat resolution now (see
+  // combat/arrival.ts for the full "empty -> station / same-owner ->
+  // merge / someone-else -> battle" rule set). Best-effort per march so
+  // one bad row can't stall the whole batch; logged and skipped on error
+  // rather than throwing, matching this sweep's "never hold a
+  // long-running transaction" design goal.
+  const arrivalOutcomes: Record<string, unknown> = {};
+  for (const m of marches) {
+    if (m.marchType !== 'attack') continue;
+    try {
+      arrivalOutcomes[m.marchId] = resolveMarchArrival(nk, logger, m);
+    } catch (e) {
+      logger.error('combat arrival resolution failed for march %s: %s', m.marchId, (e as Error).message);
+    }
+  }
+
   // Actual combat/gather-cargo resolution is stubbed per this volume's
   // scope (§ explicitly defers full combat to Volume 6, cargo caps to
   // Volume 5) — this sweep's job is purely "did the clock run out," which
@@ -155,5 +196,5 @@ export function rpcSweepMarchArrivals(
   // hasMore lets the external cron immediately re-invoke instead of waiting
   // a full cadence period when the backlog is larger than one batch (e.g.
   // right after a server outage cleared, or a genuine 10k-arrival spike).
-  return JSON.stringify({ ok: true, processed: marches.length, hasMore: marches.length === MARCH_SWEEP_BATCH_SIZE });
+  return JSON.stringify({ ok: true, processed: marches.length, hasMore: marches.length === MARCH_SWEEP_BATCH_SIZE, combatOutcomes: arrivalOutcomes });
 }

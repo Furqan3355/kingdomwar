@@ -4,7 +4,7 @@ node_modules/
 build/
 **/build/
 package-lock.json.bak
- rpcs.txt
+ rpcs
 # Build/output folders
 dist/
 build/

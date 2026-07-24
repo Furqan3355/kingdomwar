@@ -1,0 +1,1 @@
+UPDATE storage SET value = jsonb_set(value, '{army}', '{"knight":1000,"archer":800}'::jsonb) WHERE collection = 'kingdom' AND key = 'state' AND user_id = '8bd1265f-2d5c-4b9b-aac2-e21f411fba3a';
